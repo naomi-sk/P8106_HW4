@@ -1,0 +1,25 @@
+---
+title: "P8106_HW4"
+author:
+- "Naomi Simon-Kumar"
+- ns3782
+date: "04/11/2025"
+output:
+  pdf_document:
+    latex_engine: xelatex
+    toc: true
+    toc_depth: 2
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load Libraries
+
+```{r}
+
+summary(cars)
+
+```
