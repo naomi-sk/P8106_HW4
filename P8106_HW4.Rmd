@@ -11,7 +11,6 @@ output:
     toc_depth: 2
 ---
 
-
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
@@ -28,6 +27,7 @@ library(ggplot2)
 library(rpart)
 library(rpart.plot)
 library(ranger)
+library(gbm)
 
 ```
 
@@ -227,7 +227,36 @@ Therefore, the **test error (RMSE) is 1629.167**.
 
 ## c) Perform boosting on training data
 
+I fit a gradient boosting model with the Gaussian loss function.
+
 ```{r}
+
+# Set seed for reproducibility
+set.seed(299)
+
+# Define grid for tuning
+gbm.grid <- expand.grid(
+  n.trees = c(100, 200, 500, 1000, 2000, 5000, 10000),
+  interaction.depth = 1:3, # we want to learn slowly, so keep small
+  shrinkage = c(0.005, 0.01, 0.05), # range of lambda values
+  n.minobsinnode = 10  # Based on notes, this can be fixed
+)
+
+# Fit the GBM model
+gbm.fit <- train(
+  Outstate ~ .,
+  data = training_data_college,
+  method = "gbm",
+  tuneGrid = gbm.grid,
+  trControl = ctrl,
+  verbose = FALSE
+)
+
+# View best tuning parameters
+gbm.fit$bestTune
+
+# Plot the CV results
+ggplot(gbm.fit, highlight = TRUE)
 
 
 ```
