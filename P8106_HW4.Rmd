@@ -16,10 +16,220 @@ output:
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## Load Libraries
+## Loading libraries
+
+```{r libraries, message=FALSE, warning=FALSE}
+
+# Load libraries
+library(tidyverse)
+library(tidymodels)
+library(caret)
+library(ggplot2)   
+library(rpart)
+library(rpart.plot)
+library(ranger)
+
+```
+
+# Part 1: Tree Based Models using College Data
+
+## Partition into training and testing set
 
 ```{r}
 
-summary(cars)
+# Read in dataset
+college <- read.csv("College.csv")
+
+# Remove NAs
+college <- na.omit(college)
+
+# Set seed for reproducibility
+set.seed(299)
+
+# Split data into training and testing data
+data_split_college <- initial_split(college, prop = 0.8)
+
+# Extract the training and test data, removing college ID column
+training_data_college <- training(data_split_college) %>% select(-College)
+testing_data_college <- testing(data_split_college) %>% select(-College)
+
 
 ```
+
+
+## a) Build a regression tree on training data
+
+In order to implement the CART approach implementing recursive partitioning and pruning, I first fit a regression tree using cp=0 (complexity parameter). This parameter controls the complexity pruning in the CART algorithm, i.e., how splits are undertaken. Setting cp=0 was a safe choice to ensure that the tree was sufficiently large, allowing all potential splits are considered. I also produced a plot of this tree.
+
+```{r}
+
+# Set seed for reproducibility
+set.seed(299)
+
+# Fit initial tree: 
+initial.tree.fit <- rpart(Outstate ~ ., data = training_data_college,
+                      control = rpart.control(cp = 0))
+
+# Tree plot
+rpart.plot(initial.tree.fit)
+
+# Print and plot the cp table
+printcp(initial.tree.fit)
+plotcp(initial.tree.fit)
+
+```
+
+To explore the impact of adjusting the complexity parameter, I also fit a second model setting cp=0.01. This model had fewer splits by comparison. When plotted, this tree was noticeably smaller than the previous tree.
+
+```{r}
+
+# Set seed for reproducibility
+set.seed(299)
+
+# Fit another tree: 
+tree.fit.2 <- rpart(Outstate ~ ., data = training_data_college,
+                      control = rpart.control(cp = 0.01))
+
+# Tree plot
+rpart.plot(tree.fit.2)
+
+# Print and plot the cp table
+printcp(tree.fit.2)
+plotcp(tree.fit.2)
+
+```
+
+Importantly, setting cp=0 is the preferred choice, as it allowed for a large enough tree to be grown for the cost complexity table. In the cp = 0.01 model, the smallest xerror (scaled cross-validation error) was 0.37369, whereas the cp = 0 model achieved a slightly lower minimum xerror of 0.36867.
+This shows us that a fully grown tree in this case is better suited for selecting an optimal complexity parameter based on cross-validation.
+
+The optimal tree selected from the cp = 0 model has a **complexity parameter of 0.00770392**, with **11 splits** (i.e., 12 terminal nodes). This was the model that minimised scaled cross-validation error (xerror = 0.36867). Therefore, this was chosen as the final pruned tree.
+
+## b) Perform random forest on training data
+
+I decided to explore two tuning grids to find the optimal random forest model using cross-validation RMSE. The mtry parameter controls the number of predictors randomly selected at each split in the forest. I decided to tune mtry over the full range of possible values, from 1 to 16 (i.e., the full number of predictors in the college dataset). 
+
+For the first grid (min.node.size = 1:7), the best model had mtry = 7 and min.node.size = 5. 
+
+```{r}
+
+# Set seed for reproducibility
+set.seed(299)
+
+# Set cross-validation
+ctrl <- trainControl(method = "cv")
+
+# Define grid for tuning mtry and min.node.size
+rf.grid <- expand.grid(
+  mtry = 1:16, # max no. of predictors
+  splitrule = "variance",
+  min.node.size = c(1:7)
+)
+
+# Fit random forest using ranger via caret
+rf.fit <- train(
+  Outstate ~ .,
+  data = training_data_college,
+  method = "ranger",
+  tuneGrid = rf.grid,
+  trControl = ctrl
+)
+
+# Obtain optimal tuning parameters from cross-validation
+rf.fit$bestTune # mtry = 7, min.node.size = 5
+
+ggplot(rf.fit, highlight = TRUE)
+
+
+```
+
+I then decided to try an expanded grid range for min.node.size, extending it to 1:10 to check for any better performing values beyond the original range.
+
+```{r}
+
+# Set seed for reproducibility
+set.seed(299)
+
+# Define another grid for tuning mtry and min.node.size
+rf.grid2 <- expand.grid(
+  mtry = 1:16, # max no. of predictors
+  splitrule = "variance",
+  min.node.size = c(1:10)
+)
+
+# Fit random forest using ranger via caret
+rf.fit2 <- train(
+  Outstate ~ .,
+  data = training_data_college,
+  method = "ranger",
+  tuneGrid = rf.grid2,
+  trControl = ctrl
+)
+
+# Optimal parameters
+rf.fit2$bestTune  # mtry = 9, min.node.size = 3 (row 83)
+rf.fit2$results[83, ] # pulling the lowest RMSE: 1763.865
+
+# Plot performance for tuning grid values
+ggplot(rf.fit2, highlight = TRUE)
+
+```
+
+From this grid, **the optimal tuning parameters were mtry = 9 and min.node.size = 3**, selected based on the lowest cross validation RMSE (1763.865). The corresponding plot shows the lowest RMSE.
+
+Next, reporting the variable importance and the test error for this selected model (rf.fit2):
+
+I first examined permutation-based variable importance in the dataset.
+
+```{r}
+
+# Set seed for reproducibility
+set.seed(299)
+
+# Fit random forest using ranger via caret
+rf.fit2.per <- ranger(
+  Outstate ~ .,
+  data = training_data_college,
+  mtry = rf.fit2$bestTune$mtry, # selecting the cross-validated parameter
+  min.node.size = rf.fit2$bestTune$min.node.size, # selecting the cross-validated parameter
+  splitrule = "variance",
+  importance = "permutation", # selecting permutation
+  scale.permutation.importance = TRUE
+)
+
+# Plotting the variable importance 
+barplot(sort(ranger::importance(rf.fit2.per), decreasing = FALSE),
+las = 2, horiz = TRUE, cex.names = 0.7,
+col = colorRampPalette(colors = c("cyan","blue"))(19))
+
+```
+
+Based on this plot, **Expend** appears to have the highest variable importance, followed by **Room Board** and **Apps**, respectively. Books appears to be the least important variable, by comparison.
+
+Next, finding the test error:
+
+```{r}
+
+# Set seed for reproducibility
+set.seed(299)
+
+# Predict on the test data
+pred.rf2 <- predict(rf.fit2, newdata = testing_data_college)
+
+# RMSE based on the test data
+rf_test_rmse <- RMSE(pred.rf2, testing_data_college$Outstate)
+
+# Test error
+rf_test_rmse
+
+```
+
+Therefore, the **test error (RMSE) is 1629.167**.
+
+## c) Perform boosting on training data
+
+```{r}
+
+
+```
+
+
