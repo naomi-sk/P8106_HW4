@@ -203,9 +203,37 @@ col = colorRampPalette(colors = c("cyan","blue"))(19))
 
 ```
 
-Based on this plot, **Expend** appears to have the highest variable importance, followed by **Room Board** and **Apps**, respectively. Books appears to be the least important variable, by comparison.
+Based on this plot, **Expend** appears to have the highest variable importance, followed by **Room Board** and **Apps**, respectively. Books appears to be the least important variable, by comparison, followed by S.F. Ratio and P.Undergrad, in that order.
 
-Next, finding the test error:
+I decided to explore variable importance using the impurity method for the same model.
+
+```{r}
+
+# Set seed for reproducibility
+set.seed(299)
+
+# Fit random forest using ranger via caret
+rf.fit2.imp <- ranger(
+  Outstate ~ .,
+  data = training_data_college,
+  mtry = rf.fit2$bestTune$mtry, # selecting the cross-validated parameter
+  min.node.size = rf.fit2$bestTune$min.node.size, # selecting the cross-validated parameter
+  splitrule = "variance",
+  importance = "impurity", # selecting impurity
+  scale.permutation.importance = TRUE
+)
+
+# Plotting the variable importance 
+barplot(sort(ranger::importance(rf.fit2.imp), decreasing = FALSE),
+las = 2, horiz = TRUE, cex.names = 0.7,
+col = colorRampPalette(colors = c("cyan","blue"))(19))
+
+```
+As with the permutation method, the most important variable based on this plot appears to be **Expend**, followed by Room.Board. However, the impurity method shows that PhD is the third most important variable, which is different to what was identified using the permutation method (the permutation method identified the third most important variable as Apps).
+
+Books appears to be the least important variable using the impurity method, similar to the permutation method. However, unlike the permutation method, the subsequent least important variables are Enroll and F.Undergrad, in that order.
+
+Next, finding the **test error of the model**: 
 
 ```{r}
 
@@ -227,19 +255,42 @@ Therefore, the **test error (RMSE) is 1629.167**.
 
 ## c) Perform boosting on training data
 
-I fit a gradient boosting model with the Gaussian loss function.
+I proceeded to fit a gradient boosting model with the Gaussian loss function.
 
 ```{r}
 
 # Set seed for reproducibility
 set.seed(299)
 
+# Initial grid for tuning
+# gbm.grid <- expand.grid(
+ # n.trees = c(100, 200, 500, 1000, 2000, 5000, 10000),
+#  interaction.depth = 1:3, # we want to learn slowly, so keep small
+#  shrinkage = c(0.005, 0.01, 0.05), # range of lambda values
+# n.minobsinnode = 10  # Based on notes, this can be fixed
+#)
+
+# Fit the GBM model
+# gbm.fit <- train(
+ # Outstate ~ .,
+#  data = training_data_college,
+#  method = "gbm",
+#  tuneGrid = gbm.grid,
+ # trControl = ctrl,
+#  verbose = FALSE
+#)
+
+# View best tuning parameters
+# gbm.fit$bestTune 
+# n trees = 2000; interaction.depth=3; shrinkage=0.005; n.minobsinnode=10
+
+
 # Define grid for tuning
 gbm.grid <- expand.grid(
   n.trees = c(100, 200, 500, 1000, 2000, 5000, 10000),
-  interaction.depth = 1:3, # we want to learn slowly, so keep small
-  shrinkage = c(0.005, 0.01, 0.05), # range of lambda values
-  n.minobsinnode = 10  # Based on notes, this can be fixed
+  interaction.depth = 1:4, # increase to 4, still keeping small
+  shrinkage = c(0.001, 0.005, 0.01, 0.05), # adding an additional shrinkage
+  n.minobsinnode = 10  
 )
 
 # Fit the GBM model
@@ -253,7 +304,7 @@ gbm.fit <- train(
 )
 
 # View best tuning parameters
-gbm.fit$bestTune
+gbm.fit$bestTune # n.trees = 500; shrinkage=0.01, interaction.depth=4
 
 # Plot the CV results
 ggplot(gbm.fit, highlight = TRUE)
@@ -261,4 +312,21 @@ ggplot(gbm.fit, highlight = TRUE)
 
 ```
 
+I initially tested a smaller grid when tuning the model parameters with interaction.depth = 1:3. The best model had interaction.depth = 3, which was the upper limit of that range. Even though it is acceptable for interaction.depth to be at the boundary, I decided to expand the grid to 1:4 to explore other ranges and to also explore another shrinkage parameter.
+
+Based on the cross-validation RMSE plot showing the combinations of shrinkage (i.e., the learning rate), n.trees (number of boosting iterations), and interaction depth (tree depth), we can see that the lowest RMSE was achieved with shrinkage = 0.01, interaction.depth = 4, and approximately 500 boosting iterations (n.trees). This is consistent with the Generalized Boosting Models package documentation, which notes that the relationship between shrinkage and optimal iterations is roughly proportional, as our optimal n.trees decreased when we increased the shrinkage value (Ridgeway, 2024). 
+
+Next, finding the **variable importance**.
+
+```{r}
+
+summary(gbm.fit$finalModel, las = 2, cBars = 19, cex.names = 0.6)
+
+```
+From this, we can see the most important predictor appears to be **Expend**, followed by Room.Board and perc.alumni, respectively.
+The least important variable based on this summary of the boosting model appears to be Enroll, followed by P.Undergrad and S.F. Ratio, in that order.
+
+# References
+
+Ridgeway, G. (2024, June 26). Generalized Boosted Models: A guide to the gbm package.RetryClaude can make mistakes. Please double-check responses.
 
