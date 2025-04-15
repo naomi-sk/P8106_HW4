@@ -359,6 +359,26 @@ The test error for the model is **1568.585**.
 
 ```{r}
 
+# Read in dataset
+auto <- read.csv("auto.csv")
+
+# Remove NAs
+auto <- na.omit(auto)
+
+# Recode mpg_cat as binary variable (0 = "low", 1 = "high")
+auto <- auto %>%
+  mutate(mpg_cat = ifelse(mpg_cat == "high", 1, 0))
+
+# Set seed for reproducibility
+set.seed(299)
+
+# Split data into training and testing data
+data_split_auto <- initial_split(auto, prop = 0.7)
+
+
+# Extract the training and test data
+training_data_auto <- training(data_split_auto)
+testing_data_auto <- testing(data_split_auto)
 
 ```
 
