@@ -102,7 +102,7 @@ plotcp(tree.fit.2)
 Importantly, setting cp=0 is the preferred choice, as it allowed for a large enough tree to be grown for the cost complexity table. In the cp = 0.01 model, the smallest xerror (scaled cross-validation error) was 0.37369, whereas the cp = 0 model achieved a slightly lower minimum xerror of 0.36867.
 This shows us that a fully grown tree in this case is better suited for selecting an optimal complexity parameter based on cross-validation.
 
-The optimal tree selected from the cp = 0 model has a **complexity parameter of 0.00770392**, with **11 splits** (i.e., 12 terminal nodes). This was the model that minimised scaled cross-validation error (xerror = 0.36867). Therefore, this was chosen as the final pruned tree.
+The optimal tree selected from the cp = 0 model has a **complexity parameter of 0.00770392**, with **11 splits** (i.e., 12 terminal nodes). This was the model that minimised scaled cross-validation error (**xerror = 0.36867**). Therefore, this was chosen as the final pruned tree.
 
 ## b) Perform random forest on training data
 
@@ -229,6 +229,7 @@ las = 2, horiz = TRUE, cex.names = 0.7,
 col = colorRampPalette(colors = c("cyan","blue"))(19))
 
 ```
+
 As with the permutation method, the most important variable based on this plot appears to be **Expend**, followed by Room.Board. However, the impurity method shows that PhD is the third most important variable, which is different to what was identified using the permutation method (the permutation method identified the third most important variable as Apps).
 
 Books appears to be the least important variable using the impurity method, similar to the permutation method. However, unlike the permutation method, the subsequent least important variables are Enroll and F.Undergrad, in that order.
@@ -327,6 +328,7 @@ set.seed(299)
 summary(gbm.fit$finalModel, las = 2, cBars = 19, cex.names = 0.6)
 
 ```
+
 From this, we can see the most important predictor appears to be **Expend**, followed by Room.Board and perc.alumni, respectively.
 The least important variable based on this summary of the boosting model appears to be Enroll, followed by P.Undergrad and S.F. Ratio, in that order.
 
