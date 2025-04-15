@@ -320,11 +320,46 @@ Next, finding the **variable importance**.
 
 ```{r}
 
+# Set seed for reproducibility
+set.seed(299)
+
+# Using summary to find variable importance for boosting
 summary(gbm.fit$finalModel, las = 2, cBars = 19, cex.names = 0.6)
 
 ```
 From this, we can see the most important predictor appears to be **Expend**, followed by Room.Board and perc.alumni, respectively.
 The least important variable based on this summary of the boosting model appears to be Enroll, followed by P.Undergrad and S.F. Ratio, in that order.
+
+Next, finding the **test error** for the boosting model:
+
+```{r}
+
+# Set seed for reproducibility
+set.seed(299)
+
+# Predict on the test data
+pred.gbm.fit <- predict(gbm.fit, newdata = testing_data_college)
+
+# RMSE based on the test data
+gbm_test_rmse <- RMSE(pred.gbm.fit, testing_data_college$Outstate)
+
+# Test error
+gbm_test_rmse
+
+```
+
+The test error for the model is **1568.585**. 
+
+
+# Part 2: Classification using Auto dataset
+
+## Partition into training and testing set
+
+```{r}
+
+
+```
+
 
 # References
 
