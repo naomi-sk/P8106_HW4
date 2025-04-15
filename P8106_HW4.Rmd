@@ -178,7 +178,7 @@ From this grid, **the optimal tuning parameters were mtry = 9 and min.node.size 
 
 Next, reporting the variable importance and the test error for this selected model (rf.fit2):
 
-I first examined permutation-based variable importance in the dataset.
+I first examined **permutation-based variable importance** in the dataset.
 
 ```{r}
 
@@ -232,7 +232,7 @@ col = colorRampPalette(colors = c("cyan","blue"))(19))
 
 As with the permutation method, the most important variable based on this plot appears to be **Expend**, followed by Room.Board. However, the impurity method shows that PhD is the third most important variable, which is different to what was identified using the permutation method (the permutation method identified the third most important variable as Apps).
 
-Books appears to be the least important variable using the impurity method, similar to the permutation method. However, unlike the permutation method, the subsequent least important variables are Enroll and F.Undergrad, in that order.
+Books appears to be the least important variable using the impurity method, similar to the permutation method. However, unlike the permutation method, the subsequent least important variables are Enroll and F.Undergrad, in that order. This difference is consistent with the literature, with permutation importance avoiding biases that affect impurity measures, though impurity based variable importance rankings can be more computationally efficient and sometimes more robust to data perturbations in high-dimensional settings (Nembrini, et al., 2018).
 
 Next, finding the **test error of the model**: 
 
@@ -365,5 +365,7 @@ The test error for the model is **1568.585**.
 
 # References
 
-Ridgeway, G. (2024, June 26). Generalized Boosted Models: A guide to the gbm package.RetryClaude can make mistakes. Please double-check responses.
+Ridgeway, G. (2024, June 26). Generalized Boosted Models: A guide to the gbm package.
+
+Nembrini, S., König, I. R., & Wright, M. N. (2018). The revival of the Gini importance?. Bioinformatics, 34(21), 3711-3718.
 
