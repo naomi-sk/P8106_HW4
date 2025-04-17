@@ -28,6 +28,8 @@ library(rpart)
 library(rpart.plot)
 library(ranger)
 library(gbm)
+library(rsample)
+library(pROC)
 
 ```
 
@@ -67,8 +69,9 @@ In order to implement the CART approach implementing recursive partitioning and 
 set.seed(299)
 
 # Fit initial tree: 
-initial.tree.fit <- rpart(Outstate ~ ., data = training_data_college,
-                      control = rpart.control(cp = 0))
+initial.tree.fit <- rpart(Outstate ~ ., 
+                          data = training_data_college,
+                          control = rpart.control(cp = 0))
 
 # Tree plot
 rpart.plot(initial.tree.fit)
@@ -87,8 +90,9 @@ To explore the impact of adjusting the complexity parameter, I also fit a second
 set.seed(299)
 
 # Fit another tree: 
-tree.fit.2 <- rpart(Outstate ~ ., data = training_data_college,
-                      control = rpart.control(cp = 0.01))
+tree.fit.2 <- rpart(Outstate ~ ., 
+                    data = training_data_college,
+                    control = rpart.control(cp = 0.01))
 
 # Tree plot
 rpart.plot(tree.fit.2)
@@ -99,8 +103,7 @@ plotcp(tree.fit.2)
 
 ```
 
-Importantly, setting cp=0 is the preferred choice, as it allowed for a large enough tree to be grown for the cost complexity table. In the cp = 0.01 model, the smallest xerror (scaled cross-validation error) was 0.37369, whereas the cp = 0 model achieved a slightly lower minimum xerror of 0.36867.
-This shows us that a fully grown tree in this case is better suited for selecting an optimal complexity parameter based on cross-validation.
+Importantly, setting cp=0 is the preferred choice, as it allowed for a large enough tree to be grown for the cost complexity table. In the cp = 0.01 model, the smallest xerror (scaled cross-validation error) was 0.37369, whereas the cp = 0 model achieved a slightly lower minimum xerror of 0.36867. This shows us that a fully grown tree in this case is better suited for selecting an optimal complexity parameter based on cross-validation.
 
 The optimal tree selected from the cp = 0 model has a **complexity parameter of 0.00770392**, with **11 splits** (i.e., 12 terminal nodes). This was the model that minimised scaled cross-validation error (**xerror = 0.36867**). Therefore, this was chosen as the final pruned tree.
 
@@ -116,7 +119,9 @@ For the first grid (min.node.size = 1:7), the best model had mtry = 7 and min.no
 set.seed(299)
 
 # Set cross-validation
-ctrl <- trainControl(method = "cv")
+ctrl <- trainControl(method = "cv",
+                     classProbs = TRUE,
+                     summaryFunction = twoClassSummary)
 
 # Define grid for tuning mtry and min.node.size
 rf.grid <- expand.grid(
@@ -315,7 +320,7 @@ ggplot(gbm.fit, highlight = TRUE)
 
 I initially tested a smaller grid when tuning the model parameters with interaction.depth = 1:3. The best model had interaction.depth = 3, which was the upper limit of that range. Even though it is acceptable for interaction.depth to be at the boundary, I decided to expand the grid to 1:4 to explore other ranges and to also explore another shrinkage parameter.
 
-Based on the cross-validation RMSE plot showing the combinations of shrinkage (i.e., the learning rate), n.trees (number of boosting iterations), and interaction depth (tree depth), we can see that the lowest RMSE was achieved with shrinkage = 0.01, interaction.depth = 4, and approximately 500 boosting iterations (n.trees). This is consistent with the Generalized Boosting Models package documentation, which notes that the relationship between shrinkage and optimal iterations is roughly proportional, as our optimal n.trees decreased when we increased the shrinkage value (Ridgeway, 2024). 
+Based on the cross-validation RMSE plot showing the combinations of shrinkage (i.e., the learning rate), n.trees (number of boosting iterations), and interaction depth (tree depth), we can see that the lowest RMSE was achieved with **shrinkage = 0.01, n.minobsinnode = 10, interaction.depth = 4**, and approximately **500 boosting iterations (n.trees)**.  This is consistent with the Generalized Boosting Models package documentation, which notes that the relationship between shrinkage and optimal iterations is roughly proportional, as our optimal n.trees decreased when we increased the shrinkage value (Ridgeway, 2024). Notably, while n.minobsinnode was at the boundary of the range, it was noted by the Professor that this is acceptable.
 
 Next, finding the **variable importance**.
 
@@ -381,6 +386,146 @@ training_data_auto <- training(data_split_auto)
 testing_data_auto <- testing(data_split_auto)
 
 ```
+
+## a) Classification Tree
+
+Using the rpart method, I proceeded to fit the tree:
+
+```{r}
+
+# Set seed for reproducibility
+set.seed(299)
+
+# Build tree
+rpart.class.tree.fit <- rpart(formula = mpg_cat ~ . ,
+               data = training_data_auto,
+               control = rpart.control(cp = 0))
+
+# Produce cp table and plot tree
+cpTable <- printcp(rpart.class.tree.fit)
+plotcp(rpart.class.tree.fit)
+
+```
+
+I set cp=0, to allow for a sufficiently large enough tree to be grown. The optimal tree selected from this cp = 0 model has a **complexity parameter of 0.022556**, with **1 split** (i.e, **tree size is 2 terminal nodes** in the decision tree). 
+This was the model that minimised scaled cross-validation error (**xerror = 0.21805**). Therefore, this was chosen as the final pruned tree.
+
+Next, using the 1SE rule to build the tree:
+
+```{r}
+
+# Set seed for reproducibility
+set.seed(299)
+
+# Find row with min Cross validation error (xerror)
+minErr <- which.min(cpTable[, 4])  # column 4 is xerror
+
+# Extracts the cp parameter corresponding to the 1se rule
+tree.fit.1se <- rpart::prune(rpart.class.tree.fit, 
+                             cp = cpTable[minErr, 1])  # column 1 is cp
+
+# Plot cp for the 1se tree
+plotcp(tree.fit.1se)
+
+# Plot the pruned tree
+rpart.plot(tree.fit.1se)
+
+```
+
+In applying the 1se rule, we are looking for the smallest tree below the dotted line. The 1se rule allows us to select the smallest tree whose cross-validation error is within one standard error of the minimum.
+In this case, the **selected tree has 1 split, with 2 terminal nodes**. Therefore, this is the same tree size when using the lowest cross-validation error.
+
+## b) Boosting model: AdaBoost
+
+```{r}
+
+# Set seed for reproducibility
+set.seed(299)
+
+# Check factor levels
+levels(training_data_auto$mpg_cat)
+
+# Relevel mpg_cat
+training_data_auto <- training_data_auto %>%
+  mutate(mpg_cat = factor(ifelse(mpg_cat == 1, "high", "low"), levels = c("low", "high")))
+testing_data_auto <- testing_data_auto %>%
+  mutate(mpg_cat = factor(ifelse(mpg_cat == 1, "high", "low"), levels = c("low", "high")))
+
+
+# Set cross validation 
+ctrl.adaboost <- trainControl(method = "cv",
+                              classProbs = TRUE,
+                              summaryFunction = twoClassSummary)
+
+# Tuning grid for adaboost
+gbm.ada.grid <- expand.grid(
+  n.trees = c(100, 200, 500, 1000, 2000, 5000, 10000),
+  interaction.depth = 1:4, # want to learn slowly, so keep small
+  shrinkage = c(0.001, 0.003, 0.005, 0.01), # range of lambda values
+  n.minobsinnode = 10 # based on notes, can fix this at 10
+)
+
+# Fit gbm with caret, using adaboost
+gbm.ada.fit <- train(mpg_cat ~ .,
+  data = training_data_auto,
+  tuneGrid = gbm.ada.grid,
+  trControl = ctrl.adaboost,
+  method = "gbm",
+  distribution = "adaboost",
+  metric = "ROC",
+  verbose = FALSE
+)
+
+# Plot to show best tuning parameters
+ggplot(gbm.ada.fit, highlight = TRUE)
+
+# Optimal tuning parameters
+gbm.ada.fit$bestTune
+
+
+
+```
+
+I relevelled the outcome variable to make sure high was the second factor level, in order for it to be treated as the positive class when computing AUC using caret.
+
+I then proceeded to peform boosting using adaboost. I initially tried a range of values for interaction depth between 1:5, however, this produced a shrinkage value at the boundary of the grid (0.01).
+I then tuned the grid keeping interaction.depth at 4, which was appropriate as it gave me n.trees and shrinkage values not at the boundary of their respective grids. Based on this model, the optimal tuning parameters were **n.trees = 1000, interaction.depth = 4, shrinkage = 0.003, and n.minobsinnode = 10**, based on 10 fold cross validation AUC. This is evident based on the plot, where we can see the best performance at shrinkage=0.003 and interaction.depth=4. 
+
+```{r}
+
+# Set seed for reproducibility
+set.seed(299)
+
+# Presenting variable importance
+summary(gbm.ada.fit$finalModel, las = 2, cBars = 19, cex.names = 0.6)
+
+```
+
+From this, we can see the most important predictor appears to be **displacement**, followed by **weight** and **cylinders**, respectively. The least important variable based on this model appears to be **origin**, followed by acceleration and horsepower, in that order.
+
+Next, obtaining test error:
+
+```{r}
+
+# Set seed for reproducibility
+set.seed(299)
+
+# Predict probabilities for positive class (ie high)
+gbmA.prob <- predict(gbm.ada.fit, newdata = testing_data_auto, type = "prob")[, "high"]
+
+# Compute and plot ROC
+roc.gbmA <- roc(testing_data_auto$mpg_cat, gbmA.prob)
+plot(roc.gbmA, col = 2)
+
+# Test AUC
+auc <- roc.gbmA$auc[1]
+modelNames <- "Adaboost"
+legend("bottomright", legend = paste0(modelNames, ": ", round(auc,3)),
+col = 1:2, lwd = 2)
+
+```
+
+To find the test performance for this model, I computed the AUC (area under the ROC curve). Based on the plot, **AUC was 0.985**, which represents excellent classification performance on the test set.
 
 
 # References
