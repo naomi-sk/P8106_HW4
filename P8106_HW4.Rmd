@@ -56,6 +56,7 @@ training_data_college <- training(data_split_college) %>% select(-College)
 testing_data_college <- testing(data_split_college) %>% select(-College)
 
 
+
 ```
 
 
@@ -119,9 +120,8 @@ For the first grid (min.node.size = 1:7), the best model had mtry = 7 and min.no
 set.seed(299)
 
 # Set cross-validation
-ctrl <- trainControl(method = "cv",
-                     classProbs = TRUE,
-                     summaryFunction = twoClassSummary)
+ctrl <- trainControl(method = "cv", 
+                     summaryFunction = defaultSummary)
 
 # Define grid for tuning mtry and min.node.size
 rf.grid <- expand.grid(
@@ -370,9 +370,14 @@ auto <- read.csv("auto.csv")
 # Remove NAs
 auto <- na.omit(auto)
 
-# Recode mpg_cat as binary variable (0 = "low", 1 = "high")
-auto <- auto %>%
-  mutate(mpg_cat = ifelse(mpg_cat == "high", 1, 0))
+# Make sure factor variables are correctly coded
+auto$cylinders <- factor(auto$cylinders)
+auto$origin <- factor(auto$origin)
+auto$mpg_cat <- factor(auto$mpg_cat, levels = c("low", "high"))
+
+# Check variable types
+str(auto)
+levels(auto$mpg_cat)
 
 # Set seed for reproducibility
 set.seed(299)
@@ -385,7 +390,13 @@ data_split_auto <- initial_split(auto, prop = 0.7)
 training_data_auto <- training(data_split_auto)
 testing_data_auto <- testing(data_split_auto)
 
+# Check variable types
+# str(training_data_auto)
+# str(testing_data_auto)
+
 ```
+
+I made sure to recode the variables origin and cylinders to factor variable type. Although cylinders was originally represented as an integer, it is a multi-valued discrete variable as its values represent categorical groupings of engine types (i.e., 4, 6, 8 cylinder),
 
 ## a) Classification Tree
 
@@ -405,10 +416,20 @@ rpart.class.tree.fit <- rpart(formula = mpg_cat ~ . ,
 cpTable <- printcp(rpart.class.tree.fit)
 plotcp(rpart.class.tree.fit)
 
+# Obtain cp with minimum xerror
+minErr <- which.min(cpTable[, "xerror"])
+
+# Prune the tree using best cp 
+pruned.tree <- prune(rpart.class.tree.fit, cp = cpTable[minErr, "CP"])
+
+# Plot pruned tree
+rpart.plot(pruned.tree)
+
 ```
 
-I set cp=0, to allow for a sufficiently large enough tree to be grown. The optimal tree selected from this cp = 0 model has a **complexity parameter of 0.022556**, with **1 split** (i.e, **tree size is 2 terminal nodes** in the decision tree). 
-This was the model that minimised scaled cross-validation error (**xerror = 0.21805**). Therefore, this was chosen as the final pruned tree.
+I set cp=0, to allow for a sufficiently large enough tree to be grown. From the results, two trees had the same minimum (scaled) cross-validation error (**xerror = 0.19549**). I chose the simpler model **with 1 split** to prioritise interpretability.
+
+Therefore, the optimal tree selected from this cp = 0 model has a **complexity parameter of 0.0150376**, with **1 split** (i.e, **tree size corresponds to 2 terminal nodes** in the decision tree, as seen in the plot). This was the model that minimised scaled cross-validation error (**xerror = 0.19549**). Therefore, this was chosen as the final pruned tree.
 
 Next, using the 1SE rule to build the tree:
 
@@ -418,22 +439,25 @@ Next, using the 1SE rule to build the tree:
 set.seed(299)
 
 # Find row with min Cross validation error (xerror)
-minErr <- which.min(cpTable[, 4])  # column 4 is xerror
+minErr.1se <- which.min(cpTable[, 4])  # column 4 is xerror
 
 # Extracts the cp parameter corresponding to the 1se rule
 tree.fit.1se <- rpart::prune(rpart.class.tree.fit, 
-                             cp = cpTable[minErr, 1])  # column 1 is cp
+                             cp = cpTable[minErr.1se, 1])  # column 1 is cp
 
-# Plot cp for the 1se tree
+
+# Cp Table and cp plot for the 1se tree
+cpTable <- printcp(rpart.class.tree.fit)
 plotcp(tree.fit.1se)
 
 # Plot the pruned tree
 rpart.plot(tree.fit.1se)
 
+
 ```
 
 In applying the 1se rule, we are looking for the smallest tree below the dotted line. The 1se rule allows us to select the smallest tree whose cross-validation error is within one standard error of the minimum.
-In this case, the **selected tree has 1 split, with 2 terminal nodes**. Therefore, this is the same tree size when using the lowest cross-validation error.
+In this case, the **selected tree has 1 split, with 2 terminal nodes** (cp=0.0150376, xerror=0.19549). Therefore, the tree selected by the 1SE rule is the same as the one selected by the minimum cross-validation error, and they have the same tree size. 
 
 ## b) Boosting model: AdaBoost
 
@@ -444,13 +468,6 @@ set.seed(299)
 
 # Check factor levels
 levels(training_data_auto$mpg_cat)
-
-# Relevel mpg_cat
-training_data_auto <- training_data_auto %>%
-  mutate(mpg_cat = factor(ifelse(mpg_cat == 1, "high", "low"), levels = c("low", "high")))
-testing_data_auto <- testing_data_auto %>%
-  mutate(mpg_cat = factor(ifelse(mpg_cat == 1, "high", "low"), levels = c("low", "high")))
-
 
 # Set cross validation 
 ctrl.adaboost <- trainControl(method = "cv",
@@ -486,9 +503,9 @@ gbm.ada.fit$bestTune
 
 ```
 
-I relevelled the outcome variable to make sure high was the second factor level, in order for it to be treated as the positive class when computing AUC using caret.
+I ensured the outcome variable mpg_cat was coded so that high was the second factor level, in order for it to be treated as the positive class when computing AUC using caret.
 
-I then proceeded to peform boosting using adaboost. I initially tried a range of values for interaction depth between 1:5, however, this produced a shrinkage value at the boundary of the grid (0.01).
+I then proceeded to perform boosting using adaboost. I initially tried a range of values for interaction depth between 1:5, however, this produced a shrinkage value at the boundary of the grid (0.01).
 I then tuned the grid keeping interaction.depth at 4, which was appropriate as it gave me n.trees and shrinkage values not at the boundary of their respective grids. Based on this model, the optimal tuning parameters were **n.trees = 1000, interaction.depth = 4, shrinkage = 0.003, and n.minobsinnode = 10**, based on 10 fold cross validation AUC. This is evident based on the plot, where we can see the best performance at shrinkage=0.003 and interaction.depth=4. 
 
 ```{r}
@@ -501,7 +518,7 @@ summary(gbm.ada.fit$finalModel, las = 2, cBars = 19, cex.names = 0.6)
 
 ```
 
-From this, we can see the most important predictor appears to be **displacement**, followed by **weight** and **cylinders**, respectively. The least important variable based on this model appears to be **origin**, followed by acceleration and horsepower, in that order.
+From this, we can see the most important predictor appears to be **displacement**, followed by **cylinders4** and **weight**, respectively. The least important variable based on this model appears to be **cylinders8**, followed by cylinders5 and origin3, in that order.
 
 Next, obtaining test error:
 
@@ -525,7 +542,7 @@ col = 1:2, lwd = 2)
 
 ```
 
-To find the test performance for this model, I computed the AUC (area under the ROC curve). Based on the plot, **AUC was 0.985**, which represents excellent classification performance on the test set.
+To find the test performance for this model, I computed the AUC (area under the ROC curve). Based on the plot, **AUC was 0.986**, which represents excellent classification performance on the test set.
 
 
 # References
