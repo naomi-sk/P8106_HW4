@@ -542,7 +542,7 @@ col = 1:2, lwd = 2)
 
 ```
 
-To find the test performance for this model, I computed the AUC (area under the ROC curve). Based on the plot, **AUC was 0.986**, which represents excellent classification performance on the test set.
+To find the test performance for this model, I computed the AUC (area under the ROC curve). Based on the plot, **AUC was 0.986**, which represents excellent classification performance for predicting mpg_cat on the test set. This would indicate that the adaboost model is fairly reliable in distinguishing between high and low fuel efficiency.
 
 
 # References
