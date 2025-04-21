@@ -438,25 +438,28 @@ Next, using the 1SE rule to build the tree:
 # Set seed for reproducibility
 set.seed(299)
 
-# Find row with min Cross validation error (xerror)
-minErr.1se <- which.min(cpTable[, 4])  # column 4 is xerror
+# Get min cross validation error and its standard error
+min_xerror <- min(cpTable[, "xerror"])
+xstd_at_min <- cpTable[which.min(cpTable[, "xerror"]), "xstd"]
 
-# Extracts the cp parameter corresponding to the 1se rule
-tree.fit.1se <- rpart::prune(rpart.class.tree.fit, 
-                             cp = cpTable[minErr.1se, 1])  # column 1 is cp
+# Get largest cp  so  xerror less or equal to min_xerror + xstd
+cp_under_1se <- cpTable[cpTable[, "xerror"] <= min_xerror + xstd_at_min, ]
 
+cp_under_1se
 
-# Cp Table and cp plot for the 1se tree
-cpTable <- printcp(rpart.class.tree.fit)
-plotcp(tree.fit.1se)
+# 1st is largest cp 
+cp_1se <- cp_under_1se[1, "CP"]  
 
-# Plot the pruned tree
+# Use 1SE cp to prune tree
+tree.fit.1se <- rpart::prune(rpart.class.tree.fit, cp = cp_1se)
+
+# Plot tree
 rpart.plot(tree.fit.1se)
 
 ```
 
-In applying the 1se rule, we are looking for the smallest tree below the dotted line (i.e., representing minimum cross-validation error + 1 standard error). The 1se rule allows us to select the smallest tree whose cross-validation error is within one standard error of the minimum based on this.
-In this case, the **selected tree has 1 split, with 2 terminal nodes** (cp=0.0150376, xerror=0.19549). Therefore, the tree selected by the 1SE rule is the same as the one selected by the minimum cross-validation error, and they have the same tree size. 
+In applying the 1se rule, we are looking for the smallest tree below the dotted line (i.e., representing minimum cross-validation error + 1 standard error). The 1se rule allows us to select the smallest tree whose cross-validation error is within one standard error of the minimum accordingly.
+In this case, the **selected tree has 1 split, with 2 terminal nodes** (cp=0.015037594, xerror=0.1954887). Therefore, the tree selected by the 1SE rule is the same as the one selected by the minimum cross-validation error, and they have the same tree size. 
 
 ## b) Boosting model: AdaBoost
 
